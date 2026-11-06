@@ -1,6 +1,6 @@
 # DV-STAR
 
-**Description**: This is the implementation of DV-STAR
+**Description**: This is the implementation of VD-STAR
 
 
 ## Cmake version: 3.28.1
