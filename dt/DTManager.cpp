@@ -1,13 +1,19 @@
 #include "DTManager.h"
 
-void DTManager::removeInstance(int _indexToDel) {
+DTInstance *DTManager::removeInstance(int _indexToDel) {
     int length = dtInstanceList.size();
+    DTInstance *toDel = dtInstanceList[_indexToDel];
+    DTInstance *moved = nullptr;
+
     if (_indexToDel == length - 1) {
         dtInstanceList.pop_back();
     } else {
-        DTInstance *temp = dtInstanceList[length - 1];
-        dtInstanceList[length - 1] = dtInstanceList[_indexToDel];
-        dtInstanceList[_indexToDel] = temp;
+        moved = dtInstanceList[length - 1];
+        dtInstanceList[_indexToDel] = moved;
+        moved->set_dt_index(_indexToDel);
         dtInstanceList.pop_back();
     }
+
+    delete toDel;
+    return moved;
 }

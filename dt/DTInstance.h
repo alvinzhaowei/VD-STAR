@@ -43,6 +43,11 @@ public:
 
     DTBucketElement *get_element2() { return &element2; }
 
+    inline void set_dt_index(const int &_dtIndex) {
+        element1.dtIndex = _dtIndex;
+        element2.dtIndex = _dtIndex;
+    }
+
 //    inline int get_my_bucket_index(const int &_neighborID) const {
 //        return (_neighborID == element1.neighborID ? element1 : element2)
 //                .bucket_index;

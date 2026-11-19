@@ -79,6 +79,7 @@ void DTBucket::ReleaseSpace() {
         buckList[i].release_space();
     }
     buckList.release_space();
+    cnt.release_space();
 }
 
 DTBucketElement* DTBucket::getElement(int i, int j) const {
