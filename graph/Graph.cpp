@@ -8,8 +8,8 @@ Graph::Graph(MyVector<dynscan::Vertex *> &_vList, double _rho) {
     rho = _rho;
     int vertex_number = (int) vList.size();
     computePermutationNumber(omega * _rho);
-//    myJaccard = new Jaccard((long double) 1.0 / FAILURE_PROB, omega * rho);
-     myJaccard = new Jaccard((long double) 1.0 / (1 / vertex_number), omega * rho);
+    myJaccard = new Jaccard((long double) 1.0 / FAILURE_PROB, omega * rho);
+     // myJaccard = new Jaccard((long double) 1.0 / (1 / vertex_number), omega * rho);
 }
 
 int Graph::insertEdge(int _vID1, int _vID2) {
@@ -25,9 +25,10 @@ int Graph::insertEdge(int _vID1, int _vID2) {
         v2 = (dynscan::Vertex *) createVertex(_vID2);
     }
     if (!v1->isLarge() && !v2->isLarge()) {
-        if (v1->getDegree() >= permutationNum - 1 &&
-            v2->getDegree() >= permutationNum - 1) {
+        if (!v1->isLarge() && v1->getDegree() >= permutationNum - 1) {
             makeLarge(v1);
+        }
+        if (!v2->isLarge() && v2->getDegree() >= permutationNum - 1) {
             makeLarge(v2);
         }
     } else if (!v1->isLarge() && v1->getDegree() >= permutationNum - 1 &&
@@ -70,9 +71,22 @@ int Graph::removeEdge(int _vID1, int _vID2) {
         const int _bucket_index = instance->get_exp();
         const int element_index_1 = instance->get_element_index(_vID2);
         const int element_index_2 = instance->get_element_index(_vID1);
+
         v1->DeleteElement(_bucket_index, element_index_1);
         v2->DeleteElement(_bucket_index, element_index_2);
-        dtManager.removeInstance(dtIndex);
+        v1->erase_instance_index_by_neighbor_id(_vID2);
+        v2->erase_instance_index_by_neighbor_id(_vID1);
+
+        DTInstance *moved = dtManager.removeInstance(dtIndex);
+        if (moved != nullptr)
+        {
+            const int moved_vid2 = moved->get_element1()->get_neighbor_id();
+            const int moved_vid1 = moved->get_element2()->get_neighbor_id();
+            auto *moved_v1 = (dynscan::Vertex *) vList[moved_vid1 - 1];
+            auto *moved_v2 = (dynscan::Vertex *) vList[moved_vid2 - 1];
+            moved_v1->set_instance_index_map_by_neighbor_id(moved_vid2, dtIndex);
+            moved_v2->set_instance_index_map_by_neighbor_id(moved_vid1, dtIndex);
+        }
     }
     if ((v1->isLarge() && !v2->isLarge()) ||
         v1->getDegree() > v2->getDegree()) {
@@ -112,6 +126,31 @@ int Graph::insertBetweenSmall(dynscan::Vertex *v1, dynscan::Vertex *v2) {
         }
     }
 
+    for (int i = 0; i < degree1; ++i) {
+        const int &neighborID = adjacentList1[i];
+        auto *neighbor_v = (dynscan::Vertex *) vList[neighborID - 1];
+        if (neighbor_v->isLarge()) continue;
+
+        int inter = v1->getIntersectionCnt(i);
+        int neighborDeg = neighbor_v->getDegree();
+        double newSim = inter / (double) ((degree1 + 2) + (neighborDeg + 1) - inter);
+        v1->updateNeighborSimScore(newSim, neighborID);
+        neighbor_v->updateNeighborSimScore(newSim, vID1);
+    }
+
+    int *adjacentList2 = v2->getAdjacentList();
+    for (int i = 0; i < degree2; ++i) {
+        const int &neighborID = adjacentList2[i];
+        auto *neighbor_v = (dynscan::Vertex *) vList[neighborID - 1];
+        if (neighbor_v->isLarge()) continue;
+
+        int inter = v2->getIntersectionCnt(i);
+        int neighborDeg = neighbor_v->getDegree();
+        double newSim = inter / (double) ((degree2 + 2) + (neighborDeg + 1) - inter);
+        v2->updateNeighborSimScore(newSim, neighborID);
+        neighbor_v->updateNeighborSimScore(newSim, vID2);
+    }
+
     // +4 here as degree increased for both vertex
     double jSimilarity =
             commonCnt / (double) (degree1 + degree2 + 4 - commonCnt);
@@ -124,11 +163,15 @@ int Graph::insertBetweenSmall(dynscan::Vertex *v1, dynscan::Vertex *v2) {
     checkVertexDTBucket(v1);
     checkVertexDTBucket(v2);
 
+
     return 0;
 }
 
 int Graph::deleteBetweenSmall(dynscan::Vertex *v1, dynscan::Vertex *v2) {
+    int vID1 = v1->id;
+    int vID2 = v2->id;
     int degree1 = v1->getDegree();
+    int degree2 = v2->getDegree();
     int *adjacentList1 = v1->getAdjacentList();
 
     for (int i = 0; i < degree1; i++) {
@@ -145,8 +188,36 @@ int Graph::deleteBetweenSmall(dynscan::Vertex *v1, dynscan::Vertex *v2) {
             v2->decreaseIntersectionCnt(index);
         }
     }
+
+    for (int i = 0; i < degree1; i++) {
+        int neighborID = adjacentList1[i];
+        dynscan::Vertex *neighbor_v = (dynscan::Vertex *) vList[neighborID - 1];
+        if (neighbor_v->isLarge()) continue;
+
+        int inter = v1->getIntersectionCnt(i);
+        int neighborDeg = neighbor_v->getDegree();
+        double newSim = inter / (double) ((degree1 + 1) + (neighborDeg + 1) - inter);
+        v1->updateNeighborSimScore(newSim, neighborID);
+        neighbor_v->updateNeighborSimScore(newSim, vID1);
+    }
+
+    // Update similarity for all remaining small neighbors of v2
+    int *adjacentList2 = v2->getAdjacentList();
+    for (int i = 0; i < degree2; i++) {
+        int neighborID = adjacentList2[i];
+        dynscan::Vertex *neighbor_v = (dynscan::Vertex *) vList[neighborID - 1];
+        if (neighbor_v->isLarge()) continue;
+
+        int inter = v2->getIntersectionCnt(i);
+        int neighborDeg = neighbor_v->getDegree();
+        double newSim = inter / (double) ((degree2 + 1) + (neighborDeg + 1) - inter);
+        v2->updateNeighborSimScore(newSim, neighborID);
+        neighbor_v->updateNeighborSimScore(newSim, vID2);
+    }
+
     checkVertexDTBucket(v1);
     checkVertexDTBucket(v2);
+
 
     return 0;
 }
@@ -172,6 +243,19 @@ int Graph::insertBetweenSmallAndLarge(dynscan::Vertex *v1,
             v1->increaseIntersectionCnt(i);
         }
     }
+
+    for (int i = 0; i < degree1; i++) {
+        int neighborID = v1->getNeighborID(i);
+        dynscan::Vertex *neighbor_v = (dynscan::Vertex *) vList[neighborID - 1];
+        if (neighbor_v->isLarge()) continue;
+
+        int inter = v1->getIntersectionCnt(i);
+        int neighborDeg = neighbor_v->getDegree();
+        double newSim = inter / (double) ((degree1 + 2) + (neighborDeg + 1) - inter);
+        v1->updateNeighborSimScore(newSim, neighborID);
+        neighbor_v->updateNeighborSimScore(newSim, vID1);
+    }
+
     double jSimilarity =
             commonCnt / (double) (degree1 + degree2 + 4 - commonCnt);
     int intersection_cnt_new_index =
@@ -216,6 +300,19 @@ int Graph::deleteBetweenSmallAndLarge(dynscan::Vertex *v1,
 
         }
     }
+
+    for (int i = 0; i < degree1; i++) {
+        int neighborID = v1->getNeighborID(i);
+        dynscan::Vertex *neighbor_v = (dynscan::Vertex *) vList[neighborID - 1];
+        if (neighbor_v->isLarge()) continue;
+
+        int inter = v1->getIntersectionCnt(i);
+        int neighborDeg = neighbor_v->getDegree();
+        double newSim = inter / (double) ((degree1 + 1) + (neighborDeg + 1) - inter);
+        v1->updateNeighborSimScore(newSim, neighborID);
+        neighbor_v->updateNeighborSimScore(newSim, v1->id);
+    }
+
     checkVertexDTBucket(v1);
     checkVertexDTBucket(v2);
     return 0;
@@ -353,7 +450,7 @@ void Graph::checkVertexDTBucket(dynscan::Vertex *curVertex) {
 
 
 int Graph::makeLarge(dynscan::Vertex *v) {
-    double start = getCurrentTime();
+    // double start = getCurrentTime();
 
     int vID = v->id;
     int vDegree = v->getDegree();
@@ -387,11 +484,12 @@ int Graph::makeLarge(dynscan::Vertex *v) {
     }
     v->set_large();
 
-    double end = getCurrentTime();
-    printf("insert:*%.9lf*\n", end - start);
+    // double end = getCurrentTime();
+    // printf("insert:*%.9lf*\n", end - start);
 
     return 0;
 }
+
 
 double Graph::query(double eps, int mu) {
     int core_num = 0;
@@ -455,4 +553,66 @@ double Graph::query(double eps, int mu) {
     }
 //    return C;
     return q_time;
+}
+
+std::vector<std::vector<int>> Graph::queryClusters(double eps, int mu) {
+    int vertex_number = (int) vList.size();
+    MyVector<dynscan::Vertex *> cores;
+    std::vector<bool> is_core(vertex_number + 1, false);
+
+    // 1. Identify all core vertices (1-indexed: v->id in [1, vertex_number])
+    for (int i = 0; i < vertex_number; i++) {
+        dynscan::Vertex *v = (dynscan::Vertex *) vList[i];
+        if (v == NULL || v->getDegree() < mu) {
+            continue;
+        }
+        int temp_m_C = v->query(eps, mu);
+        if (temp_m_C >= mu) {
+            cores.push_back(v);
+            is_core[v->id] = true;
+        }
+    }
+
+    // 2. BFS over core vertices to form structural clusters
+    // visited[w] tracks whether vertex ID w (1..vertex_number) is already assigned
+    std::vector<int> visited(vertex_number + 1, 0);
+    std::vector<std::vector<int>> clusters;
+    std::queue<dynscan::Vertex *> Q;
+
+    for (int i = 0, core_number = cores.size(); i < core_number; i++) {
+        dynscan::Vertex *v = cores[i];
+        if (visited[v->id] == 1) {
+            continue;
+        }
+
+        std::vector<int> C;
+        Q.push(v);
+        visited[v->id] = 1;
+        C.push_back(v->id); // Seed core vertex is always at C[0]
+
+        while (!Q.empty()) {
+            dynscan::Vertex *u = Q.front();
+            Q.pop();
+            for (auto rit = u->NOPtr->rbegin(); rit != u->NOPtr->rend(); ++rit) {
+                if (rit->first >= eps) {
+                    int w = rit->second;
+                    if (visited[w] == 0) {
+                        visited[w] = 1;
+                        C.push_back(w);
+                        // If neighbor w is also a core vertex, expand BFS through w!
+                        if (is_core[w]) {
+                            Q.push((dynscan::Vertex *) vList[w - 1]);
+                        }
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+        if (!C.empty()) {
+            clusters.push_back(std::move(C));
+        }
+    }
+
+    return clusters;
 }

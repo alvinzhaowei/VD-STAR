@@ -7,6 +7,7 @@
 #include <cmath>
 #include <random>
 #include "../dt/DTManager.h"
+#include <vector>
 
 using namespace std;
 
@@ -46,6 +47,8 @@ public:
 
 
     double query(double eps, int mu);
+
+    std::vector<std::vector<int>> queryClusters(double eps, int mu);
 
 protected:
     /**
@@ -109,6 +112,7 @@ protected:
     void checkVertexDTBucket(dynscan::Vertex *curVertex);
 
     void computePermutationNumber(double rho) {
+
         int vertex_num = vList.size();
         int max = vertex_num;
         int min = (int) ceil(1  / rho + 0.5);

@@ -5,6 +5,20 @@
 #include <random>
 #include "Vertex.h"
 
+inline int exactIntersectionCount(const dynscan::Vertex &v,
+                                  const dynscan::Vertex &u) {
+    if (!u.isLarge()) {
+        return v.getIntersectionCnt(v.getAdjacentIndex(u.id));
+    }
+    int hits = 0;
+    for (int i = 0; i < v.getDegree(); ++i) {
+        if (u.has_neighbor(v.getNeighborID(i))) {
+            ++hits;
+        }
+    }
+    return 1 + hits;
+}
+
 class Jaccard {
 private:
     std::random_device rd;
@@ -26,7 +40,7 @@ private:
     static long long batch_num;
     static const int batch_size = 500000;
 
-    inline bool is_a_common_vertex(const dynscan::Vertex _v, const dynscan::Vertex _u) {
+    inline bool is_a_common_vertex(const dynscan::Vertex &_v, const dynscan::Vertex &_u) {
         if (index <= size_v) {
             const int v_neighbor = index < size_v ? _v.getNeighborID(index) : _v.id;
             if (_u.has_neighbor(v_neighbor)) {
@@ -106,17 +120,13 @@ public:
     inline float compute_similarity(const dynscan::Vertex &_v, const dynscan::Vertex &_u) {
 
         if (!_v.isLarge()) {
-            const int uid = _u.id;
-            const int index = _v.getAdjacentIndex(uid);
-            // get number of common neighbors between v1 and v2
-            const int common = _v.getIntersectionCnt(index);
+            const int common = exactIntersectionCount(_v, _u);
             const double jaccard = common / (double) (_v.getDegree() + _u.getDegree() + 2 - common);
             return jaccard;
-        } else if (!_u.isLarge()) {
-            const int vid = _v.id;
-            const int index = _u.getAdjacentIndex(vid);
-            // get number of common neighbors between v1 and v2
-            const int common = _u.getIntersectionCnt(index);
+        }
+
+        if (!_u.isLarge()) {
+            const int common = exactIntersectionCount(_u, _v);
             const double jaccard = common / (double) (_v.getDegree() + _u.getDegree() + 2 - common);
             return jaccard;
         }

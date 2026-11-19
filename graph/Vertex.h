@@ -1,7 +1,8 @@
 #ifndef DYNSCAN_VERTEX_H
 #define DYNSCAN_VERTEX_H
 
-#include <map>
+#include <vector>
+#include <algorithm>
 #include "../MyLib/MyVector.h"
 #include "../dt/DTBucket.h"
 #include "../dt/DTInstance.h"
@@ -37,7 +38,20 @@ namespace dynscan {
 
 
     public:
-        multimap<float, int>* NOPtr;
+        std::vector<std::pair<float, int>>* NOPtr;
+        bool no_dirty;
+
+        inline void ensureNOPtrSorted() {
+            if (!no_dirty) return;
+            int deg = adjacentList.size();
+            NOPtr->resize(deg);
+            for (int i = 0; i < deg; ++i) {
+                (*NOPtr)[i] = std::make_pair(neighbor_node_sc[i], adjacentList[i]);
+            }
+            std::sort(NOPtr->begin(), NOPtr->end());
+            no_dirty = false;
+        }
+
         /**
          * Return neighbor ID at given _index
          * @param _index
@@ -95,6 +109,10 @@ namespace dynscan {
 
         inline void set_instance_index_map_by_neighbor_id(const int &_neighborID, const int &_index) {
             neighborID_DTInstanceIndex_Map[_neighborID] = _index;
+        }
+
+        inline void erase_instance_index_by_neighbor_id(const int &_neighborID) {
+            neighborID_DTInstanceIndex_Map.erase(_neighborID);
         }
 
         /**
@@ -211,6 +229,15 @@ namespace dynscan {
             return is_large;
         };
 
+
+        ~Vertex() {
+            delete dtBucketPtr;
+            delete NOPtr;
+        }
+
+        inline static void reset_intersection_cnt_manager() {
+            intersectionCntManager.clear();
+        }
 
     };
 
